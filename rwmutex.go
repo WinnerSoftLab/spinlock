@@ -1,13 +1,14 @@
 // Copyright 2015 Julien Schmidt. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
+// Little change: use sleep instead of Gosched
 
 package spinlock
 
 import (
-	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // An RWMutex is a reader/writer mutual exclusion lock.
@@ -45,7 +46,7 @@ func (rw *RWMutex) RLock() {
 		if state := atomic.LoadUint32(&rw.state); state&rwmutexWrite == 0 {
 			return
 		}
-		runtime.Gosched()
+		time.Sleep(100 * time.Nanosecond)
 	}
 }
 
@@ -84,7 +85,7 @@ func (rw *RWMutex) RUnlock() {
 // Lock blocks until the lock is available.
 func (rw *RWMutex) Lock() {
 	for !atomic.CompareAndSwapUint32(&rw.state, rwmutexUnlocked, rwmutexWrite) {
-		runtime.Gosched()
+		time.Sleep(time.Millisecond)
 	}
 }
 
