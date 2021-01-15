@@ -5,9 +5,9 @@
 package spinlock
 
 import (
-	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // An RWMutex is a reader/writer mutual exclusion lock.
@@ -27,6 +27,8 @@ const (
 	rwmutexUnderflow      = ^uint32(rwmutexWrite)
 	rwmutexWriterUnset    = ^uint32(rwmutexWrite - 1)
 	rwmutexReaderDecrease = ^uint32(rwmutexReadOffset - 1)
+	rLockSleepTime        = 100 * time.Nanosecond
+	lockSleepTime         = time.Microsecond
 )
 
 // RLock locks rw for reading.
@@ -45,7 +47,7 @@ func (rw *RWMutex) RLock() {
 		if state := atomic.LoadUint32(&rw.state); state&rwmutexWrite == 0 {
 			return
 		}
-		runtime.Gosched()
+		time.Sleep(rLockSleepTime)
 	}
 }
 
@@ -84,7 +86,7 @@ func (rw *RWMutex) RUnlock() {
 // Lock blocks until the lock is available.
 func (rw *RWMutex) Lock() {
 	for !atomic.CompareAndSwapUint32(&rw.state, rwmutexUnlocked, rwmutexWrite) {
-		runtime.Gosched()
+		time.Sleep(lockSleepTime)
 	}
 }
 
