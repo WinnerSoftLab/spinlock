@@ -5,8 +5,8 @@
 package spinlock
 
 import (
+	"runtime"
 	"sync/atomic"
-	"time"
 )
 
 const (
@@ -25,8 +25,12 @@ type Mutex struct {
 // If the lock is already in use, the calling goroutine repetitively tries to
 // acquire the lock until it is available (busy waiting).
 func (m *Mutex) Lock() {
+	spins := 0
 	for !atomic.CompareAndSwapInt32(&m.state, mutexUnlocked, mutexLocked) {
-		time.Sleep(lockSleepTime)
+		spins++
+		if spins >= maxSpinsCount {
+			runtime.Gosched()
+		}
 	}
 }
 

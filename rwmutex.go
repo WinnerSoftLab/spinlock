@@ -5,9 +5,9 @@
 package spinlock
 
 import (
+	"runtime"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 // An RWMutex is a reader/writer mutual exclusion lock.
@@ -27,8 +27,13 @@ const (
 	rwmutexUnderflow      = ^uint32(rwmutexWrite)
 	rwmutexWriterUnset    = ^uint32(rwmutexWrite - 1)
 	rwmutexReaderDecrease = ^uint32(rwmutexReadOffset - 1)
-	rLockSleepTime        = 100 * time.Nanosecond
-	lockSleepTime         = time.Microsecond
+
+	// This arbitrary chosen number should reduce number of runtime.mcall calls
+	// Usually this number chosen as some percent of context switch cost
+	// In C# System.Threading.SpinWait YieldThreshold = 10, but SpinWait implementation has
+	// much more complicated logic and C# has no green threads, so I decided to choose 10, but
+	// it still arbitrary number.
+	maxSpinsCount = 10
 )
 
 // RLock locks rw for reading.
@@ -43,11 +48,16 @@ func (rw *RWMutex) RLock() {
 
 	// Otherwise we have to wait until the write bits become unset.
 	// Afterwards the RWMutex is in read mode.
+	spins := 0
 	for {
 		if state := atomic.LoadUint32(&rw.state); state&rwmutexWrite == 0 {
 			return
 		}
-		time.Sleep(rLockSleepTime)
+
+		spins++
+		if spins >= maxSpinsCount {
+			runtime.Gosched()
+		}
 	}
 }
 
@@ -85,8 +95,12 @@ func (rw *RWMutex) RUnlock() {
 // If the lock is already locked for reading or writing,
 // Lock blocks until the lock is available.
 func (rw *RWMutex) Lock() {
+	spins := 0
 	for !atomic.CompareAndSwapUint32(&rw.state, rwmutexUnlocked, rwmutexWrite) {
-		time.Sleep(lockSleepTime)
+		spins++
+		if spins >= maxSpinsCount {
+			runtime.Gosched()
+		}
 	}
 }
 
